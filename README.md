@@ -1,1 +1,1 @@
-# Exchange-rate-prediction
+# 거시경제 감성분석 기반 환율 예측 프로그램
