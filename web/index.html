@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEXUS — 환율 변동 예측</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#04070e;--s1:#080c17;--s2:#0b1020;--card:#0f1828;
+  --b1:#162030;--b2:#1e3050;
+  --cyan:#00c8e8;--green:#00d96e;--red:#ff3060;--gold:#e8a800;
+  --text:#ccdcee;--muted:#3d5a78;--dim:#6888a8;
+  --mono:'IBM Plex Mono',monospace;--sans:'Noto Sans KR',sans-serif;
+  --r:14px;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(0,200,232,.06),transparent)}
+
+/* ── NAV ── */
+nav{position:sticky;top:0;z-index:200;background:rgba(4,7,14,.9);backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--b1)}
+.nav-inner{max-width:1280px;margin:0 auto;padding:0 28px;display:flex;align-items:center;
+  justify-content:space-between;height:56px}
+.logo{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--cyan);
+  letter-spacing:4px;text-decoration:none;display:flex;align-items:center;gap:8px}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 10px var(--cyan);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.nav-links{display:flex;gap:2px}
+.nl{padding:7px 16px;border-radius:8px;font-size:13px;font-weight:500;color:var(--muted);
+  text-decoration:none;transition:all .18s;border:1px solid transparent}
+.nl:hover{color:var(--text);background:rgba(0,200,232,.06);border-color:var(--b2)}
+.nl.active{color:var(--cyan);background:rgba(0,200,232,.08);border-color:rgba(0,200,232,.25)}
+.nav-right{display:flex;align-items:center;gap:12px}
+.lang-toggle{display:flex;background:var(--s2);border:1px solid var(--b1);border-radius:8px;overflow:hidden}
+.lb{padding:5px 13px;font-size:12px;font-family:var(--mono);cursor:pointer;
+  background:transparent;border:none;color:var(--muted);transition:all .18s}
+.lb.active{background:var(--card);color:var(--cyan)}
+#clock{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* ── WRAP ── */
+.wrap{max-width:1280px;margin:0 auto;padding:0 28px 80px;position:relative;z-index:1}
+
+/* ── HERO ── */
+.hero{padding:56px 0 40px;text-align:center}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;
+  background:rgba(0,200,232,.06);border:1px solid rgba(0,200,232,.18);
+  color:var(--cyan);font-family:var(--mono);font-size:10px;
+  padding:5px 16px;border-radius:20px;letter-spacing:3px;margin-bottom:20px}
+.hero h1{font-size:clamp(26px,4.5vw,52px);font-weight:700;line-height:1.15;
+  letter-spacing:-1px;margin-bottom:12px}
+.hero h1 em{font-style:normal;
+  background:linear-gradient(130deg,var(--cyan) 20%,var(--green) 80%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:15px;color:var(--dim);max-width:480px;margin:0 auto;line-height:1.7}
+.hero-cta{display:inline-flex;align-items:center;gap:10px;margin-top:28px;
+  background:linear-gradient(135deg,#0a3060,#0d4080);
+  border:1px solid rgba(0,200,232,.3);color:var(--cyan);
+  padding:12px 28px;border-radius:12px;font-size:14px;font-weight:600;
+  text-decoration:none;transition:all .2s;font-family:var(--sans)}
+.hero-cta:hover{background:linear-gradient(135deg,#0d4080,#1060b0);transform:translateY(-2px);
+  box-shadow:0 8px 30px rgba(0,200,232,.2)}
+
+/* ── MODEL STATUS BAR ── */
+.status-bar{display:flex;align-items:center;gap:0;background:var(--s1);
+  border:1px solid var(--b1);border-radius:12px;padding:12px 20px;
+  margin-bottom:28px;flex-wrap:wrap;gap:16px}
+.sb-item{display:flex;flex-direction:column;gap:3px}
+.sb-label{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px}
+.sb-val{font-family:var(--mono);font-size:13px;color:var(--cyan)}
+.sb-div{width:1px;height:28px;background:var(--b1)}
+.mode-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;
+  border-radius:6px;font-size:11px;font-family:var(--mono)}
+.mode-gpt{background:rgba(0,217,110,.12);color:var(--green);border:1px solid rgba(0,217,110,.3)}
+.mode-bert{background:rgba(0,200,232,.12);color:var(--cyan);border:1px solid rgba(0,200,232,.3)}
+.mode-sk{background:rgba(232,168,0,.12);color:var(--gold);border:1px solid rgba(232,168,0,.3)}
+.mode-kw{background:rgba(61,90,120,.2);color:var(--muted);border:1px solid var(--b1)}
+
+/* ── SECTION LABEL ── */
+.sec-lbl{font-family:var(--mono);font-size:10px;letter-spacing:3px;color:var(--muted);
+  margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.sec-lbl::before{content:'';display:block;width:16px;height:1px;background:var(--cyan)}
+.sec-lbl::after{content:'';flex:1;height:1px;background:var(--b1)}
+
+/* ── RATE CARDS ── */
+.rate-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:36px}
+.rate-card{background:var(--card);border:1px solid var(--b1);border-radius:var(--r);
+  padding:20px;transition:all .25s;cursor:default;position:relative;overflow:hidden}
+.rate-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0;transition:.3s}
+.rate-card:hover{border-color:var(--b2);transform:translateY(-3px);
+  box-shadow:0 12px 36px rgba(0,0,0,.5)}
+.rate-card:hover::after{opacity:.6}
+
+.rc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.rc-flag{font-size:26px}
+.rc-pct{font-family:var(--mono);font-size:17px;font-weight:500;text-align:right}
+.rc-name{font-size:11px;color:var(--muted);margin-bottom:4px}
+.rc-pair{font-size:13px;font-weight:700;margin-bottom:6px}
+.rc-price{font-family:var(--mono);font-size:24px;font-weight:600;margin-bottom:4px;letter-spacing:-0.5px}
+.rc-chg{font-family:var(--mono);font-size:12px}
+.rc-bar{height:2px;background:var(--b1);border-radius:1px;margin-top:14px;overflow:hidden}
+.rc-fill{height:100%;border-radius:1px;width:0;transition:width 1.2s cubic-bezier(.4,0,.2,1)}
+.fill-up{background:linear-gradient(90deg,var(--red),rgba(255,48,96,.2))}
+.fill-dn{background:linear-gradient(90deg,var(--green),rgba(0,217,110,.2))}
+.won-badge{display:inline-block;font-size:10px;font-family:var(--mono);
+  padding:2px 8px;border-radius:4px;margin-top:6px}
+.won-up{background:rgba(255,48,96,.1);color:var(--red)}
+.won-dn{background:rgba(0,217,110,.1);color:var(--green)}
+
+/* ── REFRESH BTN ── */
+.refresh-btn{display:flex;align-items:center;gap:7px;background:var(--s2);
+  border:1px solid var(--b1);color:var(--muted);padding:7px 16px;border-radius:9px;
+  cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .2s}
+.refresh-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.refresh-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinning{animation:spin .7s linear infinite}
+
+/* ── CHART ── */
+.chart-card{background:var(--card);border:1px solid var(--b1);border-radius:var(--r);
+  padding:22px;height:220px}
+
+/* ── SKELETON ── */
+.sk{background:linear-gradient(90deg,var(--s2) 25%,var(--b1) 50%,var(--s2) 75%);
+  background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:8px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── DEMO BANNER ── */
+.demo-banner{background:rgba(232,168,0,.06);border:1px solid rgba(232,168,0,.2);
+  border-radius:10px;padding:10px 18px;font-size:12px;color:var(--gold);
+  font-family:var(--mono);display:flex;align-items:center;gap:8px;margin-bottom:20px}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--b2);
+  border-radius:12px;padding:12px 20px;font-size:13px;
+  box-shadow:0 16px 48px rgba(0,0,0,.6);transform:translateY(80px);opacity:0;
+  transition:all .35s cubic-bezier(.175,.885,.32,1.275);z-index:999}
+#toast.show{transform:translateY(0);opacity:1}
+
+.up{color:var(--green)}.dn{color:var(--red)}.nt{color:var(--muted)}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--b1);border-radius:3px}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-dot"></div>
+      <span>NEXUS</span>
+    </a>
+    <div class="nav-links">
+      <a href="/" class="nl active" id="nl-home">📊 실시간 환율</a>
+      <a href="/predict" class="nl" id="nl-predict">🔮 환율 예측</a>
+    </div>
+    <div class="nav-right">
+      <div class="lang-toggle">
+        <button class="lb active" id="lb-ko" onclick="setLang('ko')">KO</button>
+        <button class="lb" id="lb-en" onclick="setLang('en')">EN</button>
+      </div>
+      <div id="clock">—</div>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="hero-badge" id="h-badge">📡 실시간 환율 모니터링</div>
+    <h1 id="h-title">KRW 기준<br><em>5개 통화 실시간 환율</em></h1>
+    <p id="h-sub">거시경제 뉴스 분석 기반 환율 변동 예측 플랫폼</p>
+    <a href="/predict" class="hero-cta" id="h-cta">🔮 환율 예측 시작하기 →</a>
+  </div>
+
+  <!-- 모델 상태 -->
+  <div class="status-bar">
+    <div class="sb-item">
+      <div class="sb-label" id="sb-lbl-mode">분석 모드</div>
+      <div id="sb-mode"><div class="mode-kw">로드 중...</div></div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="sb-item">
+      <div class="sb-label">F1-score</div>
+      <div class="sb-val" id="sb-f1">—</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="sb-item">
+      <div class="sb-label" id="sb-lbl-train">학습 데이터</div>
+      <div class="sb-val" id="sb-train">—</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="sb-item">
+      <div class="sb-label" id="sb-lbl-date">학습일</div>
+      <div class="sb-val" id="sb-date">—</div>
+    </div>
+    <div style="margin-left:auto">
+      <a href="/predict" class="nl active" style="font-size:12px;padding:7px 16px" id="sb-cta">🔮 예측 하기</a>
+    </div>
+  </div>
+
+  <div class="demo-banner" id="demo-banner" style="display:none">
+    ⚠️ <span id="demo-txt">데모 모드 — pip install yfinance 후 재시작하면 실시간 데이터로 전환됩니다</span>
+  </div>
+
+  <!-- 환율 섹션 -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <div class="sec-lbl" id="rate-lbl" style="margin-bottom:0">실시간 환율 (KRW 기준)</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span id="updated-time" style="font-size:11px;color:var(--muted);font-family:var(--mono)">—</span>
+      <button class="refresh-btn" id="refresh-btn" onclick="refresh()">
+        <svg id="refresh-icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        <span id="refresh-txt">새로고침</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="rate-grid" id="rate-grid">
+    <div class="rate-card"><div class="sk" style="height:14px;width:60%;margin-bottom:14px"></div><div class="sk" style="height:28px;width:50%"></div></div>
+    <div class="rate-card"><div class="sk" style="height:14px;width:60%;margin-bottom:14px"></div><div class="sk" style="height:28px;width:50%"></div></div>
+    <div class="rate-card"><div class="sk" style="height:14px;width:60%;margin-bottom:14px"></div><div class="sk" style="height:28px;width:50%"></div></div>
+    <div class="rate-card"><div class="sk" style="height:14px;width:60%;margin-bottom:14px"></div><div class="sk" style="height:28px;width:50%"></div></div>
+    <div class="rate-card"><div class="sk" style="height:14px;width:60%;margin-bottom:14px"></div><div class="sk" style="height:28px;width:50%"></div></div>
+  </div>
+
+  <!-- 차트 -->
+  <div class="sec-lbl" id="chart-lbl">등락률 비교</div>
+  <div class="chart-card"><canvas id="rate-chart"></canvas></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let LANG = localStorage.getItem('nexus_lang') || 'ko';
+let rateChart = null;
+let lastData  = [];
+
+const T = {
+  ko:{badge:'📡 실시간 환율 모니터링',title:'KRW 기준<br><em>5개 통화 실시간 환율</em>',
+      sub:'거시경제 뉴스 분석 기반 환율 변동 예측 플랫폼',cta:'🔮 환율 예측 시작하기 →',
+      home:'📊 실시간 환율',predict:'🔮 환율 예측',
+      modeL:'분석 모드',trainL:'학습 데이터',dateL:'학습일',sbCta:'🔮 예측 하기',
+      rateL:'실시간 환율 (KRW 기준)',chartL:'등락률 비교',refresh:'새로고침',
+      demo:'데모 모드 — pip install yfinance 후 재시작하면 실시간 데이터로 전환됩니다',
+      wonWeak:'원화 약세',wonStrong:'원화 강세',refreshed:'데이터 갱신 완료'},
+  en:{badge:'📡 LIVE FX MONITORING',title:'Live <em>KRW Exchange Rates</em>',
+      sub:'News-driven FX prediction platform for Korean Won pairs',cta:'🔮 Predict FX →',
+      home:'📊 Live Rates',predict:'🔮 Prediction',
+      modeL:'Analysis Mode',trainL:'Training Data',dateL:'Trained At',sbCta:'🔮 Predict',
+      rateL:'Live Exchange Rates (KRW base)',chartL:'Change % Comparison',refresh:'Refresh',
+      demo:'Demo mode — install yfinance for live data',
+      wonWeak:'KRW Weaken',wonStrong:'KRW Strengthen',refreshed:'Data refreshed'}
+};
+
+function setLang(l){
+  LANG=l; localStorage.setItem('nexus_lang',l);
+  document.getElementById('lb-ko').classList.toggle('active',l==='ko');
+  document.getElementById('lb-en').classList.toggle('active',l==='en');
+  applyLang(l);
+}
+function applyLang(l){
+  const t=T[l];
+  const s=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+  const h=(id,v)=>{const e=document.getElementById(id);if(e)e.innerHTML=v;};
+  h('h-badge',t.badge); h('h-title',t.title); s('h-sub',t.sub); s('h-cta',t.cta);
+  s('nl-home',t.home); s('nl-predict',t.predict);
+  s('sb-lbl-mode',t.modeL); s('sb-lbl-train',t.trainL); s('sb-lbl-date',t.dateL); s('sb-cta',t.sbCta);
+  s('rate-lbl',t.rateL); s('chart-lbl',t.chartL); s('refresh-txt',t.refresh); s('demo-txt',t.demo);
+  if(lastData.length) renderRates(lastData);
+}
+document.getElementById('lb-ko').classList.toggle('active',LANG==='ko');
+document.getElementById('lb-en').classList.toggle('active',LANG==='en');
+setTimeout(()=>applyLang(LANG),0);
+
+setInterval(()=>document.getElementById('clock').textContent=
+  new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),1000);
+
+const sign=v=>v>0?'+':'';
+const cls=v=>v>0?'up':v<0?'dn':'nt';
+const arrow=v=>v>0?'▲':v<0?'▼':'—';
+function toast(msg,type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.style.borderColor=type==='err'?'var(--red)':type==='warn'?'var(--gold)':'var(--green)';
+  el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2600);
+}
+
+async function loadModelStatus(){
+  try{
+    const d=await(await fetch('/api/model/status')).json();
+    const modeMap={
+      'GPT-4o-mini':'mode-gpt','KR-FinBERT':'mode-bert',
+      'sklearn':'mode-sk','keyword':'mode-kw'
+    };
+    const cls2=modeMap[d.mode]||'mode-kw';
+    document.getElementById('sb-mode').innerHTML=`<div class="mode-badge ${cls2}">${d.mode}</div>`;
+    const f1=d.f1_score;
+    document.getElementById('sb-f1').textContent=f1!=='미학습'?f1+'%':'미학습';
+    document.getElementById('sb-f1').style.color=f1!=='미학습'?'var(--cyan)':'var(--gold)';
+    document.getElementById('sb-train').textContent=d.train_size?d.train_size.toLocaleString()+'건':'—';
+    document.getElementById('sb-date').textContent=d.trained_at!=='—'?d.trained_at.split('T')[0]:'—';
+  }catch(e){}
+}
+
+async function loadRates(){
+  try{
+    const d=await(await fetch('/api/rates')).json();
+    if(d.demo) document.getElementById('demo-banner').style.display='flex';
+    document.getElementById('updated-time').textContent=d.updated;
+    lastData=d.data;
+    renderRates(d.data);
+  }catch(e){toast('데이터 로드 실패','err');}
+}
+
+function renderRates(data){
+  const t=T[LANG];
+  const grid=document.getElementById('rate-grid');
+  grid.innerHTML=data.map((d,i)=>{
+    const c=cls(d.change_pct);
+    const pct=Math.min(100,Math.abs(d.change_pct)*30);
+    const nm=LANG==='ko'?d.name:(d.name_en||d.name||d.base);
+    return `<div class="rate-card" style="animation-delay:${i*.06}s">
+      <div class="rc-top">
+        <div class="rc-flag">${d.flag}</div>
+        <div class="rc-pct ${c}">${sign(d.change_pct)}${(d.change_pct||0).toFixed(2)}%</div>
+      </div>
+      <div class="rc-name">${nm}</div>
+      <div class="rc-pair">${d.pair}</div>
+      <div class="rc-price">${(d.price||0).toLocaleString('ko-KR',{maximumFractionDigits:2})}</div>
+      <div class="rc-chg ${c}">${arrow(d.change_pct)} ${sign(d.change||0)}${(d.change||0).toFixed(2)}</div>
+      <div class="won-badge ${d.change_pct>0?'won-up':'won-dn'}">${d.change_pct>0?t.wonWeak:t.wonStrong}</div>
+      <div class="rc-bar"><div class="rc-fill ${d.change_pct>0?'fill-up':'fill-dn'}" id="rcf${i}" style="width:0"></div></div>
+    </div>`;
+  }).join('');
+  setTimeout(()=>data.forEach((d,i)=>{
+    const el=document.getElementById('rcf'+i);
+    if(el) el.style.width=Math.min(100,Math.abs(d.change_pct)*30)+'%';
+  }),120);
+  buildChart(data);
+}
+
+function buildChart(data){
+  if(rateChart) rateChart.destroy();
+  const labels=data.map(d=>d.pair.split('/')[0]);
+  const vals=data.map(d=>d.change_pct||0);
+  const colors=vals.map(v=>v>0?'rgba(255,48,96,.7)':'rgba(0,217,110,.7)');
+  const borders=vals.map(v=>v>0?'#ff3060':'#00d96e');
+  rateChart=new Chart(document.getElementById('rate-chart'),{
+    type:'bar',
+    data:{labels,datasets:[{data:vals,backgroundColor:colors,borderColor:borders,borderWidth:1,borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#0f1828',borderColor:'#162030',borderWidth:1,
+        callbacks:{label:c=>(c.parsed.y>0?'+':'')+c.parsed.y.toFixed(2)+'% (원화'+(c.parsed.y>0?' 약세':(c.parsed.y<0?' 강세':' 보합'))+')'},
+        titleFont:{family:'IBM Plex Mono'},bodyFont:{family:'IBM Plex Mono',size:12}}},
+      scales:{
+        x:{ticks:{color:'#3d5a78',font:{family:'IBM Plex Mono',size:11}},grid:{color:'rgba(22,32,48,.6)'}},
+        y:{ticks:{color:'#3d5a78',font:{family:'IBM Plex Mono',size:11},callback:v=>(v>0?'+':'')+v+'%'},
+           grid:{color:'rgba(22,32,48,.6)'},border:{dash:[4,4]}}
+      },animation:{duration:700,easing:'easeOutQuart'}}
+  });
+}
+
+async function refresh(){
+  const icon=document.getElementById('refresh-icon');
+  const btn=document.getElementById('refresh-btn');
+  icon.classList.add('spinning'); btn.disabled=true;
+  await loadRates();
+  icon.classList.remove('spinning'); btn.disabled=false;
+  toast('✅ '+(LANG==='ko'?T.ko.refreshed:T.en.refreshed));
+}
+
+// 초기화
+(async()=>{
+  loadModelStatus();
+  await loadRates();
+})();
+setInterval(loadRates, 60000);
+</script>
+</body>
+</html>
